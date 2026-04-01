@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:ms-aichain="http://www.mulesoft.org/schema/mule/ms-aichain"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ms-aichain http://www.mulesoft.org/schema/mule/ms-aichain/current/mule-ms-aichain.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<flow name="salesforce-mule-aiFlow" doc:id="450a9ac6-e8b2-41ab-a5c4-bc734d777a21" >
+		<http:listener doc:name="Listener" doc:id="5d13d6f2-6b8c-4b19-b68a-d5d3f0698393" config-ref="HTTP_Listener_config" path="/ask"/>
+		<set-variable value="#[attributes.queryParams.question]" doc:name="Set Variable" doc:id="3d8d0473-eb1f-45d1-97e7-b951e7701395" variableName="userQuestion"/>
+		<ms-aichain:chat-answer-prompt doc:name="Chat answer prompt" doc:id="3b61f260-3f28-45eb-8ed1-8598c8c8ed08" config-ref="MuleSoft_AI_Chain_Config">
+			<ms-aichain:prompt ><![CDATA[#[vars.userQuestion]]]></ms-aichain:prompt>
+		</ms-aichain:chat-answer-prompt>
+		<logger level="INFO" doc:name="Logger" doc:id="9cfed6db-aa9a-4bdf-95ef-05a48b970cd5" message="#[payload]"/>
+		<!-- [STUDIO:"Image generate"]<ms-aichain:image-generate doc:name="Image generate" doc:id="5fdcab25-8a87-4b27-88f0-f1c6179e2d1d" config-ref="MuleSoft_AI_Chain_Config">
+			<ms-aichain:data ><![CDATA[#[vars.userQuestion&#93;&#93;&#93;></ms-aichain:data>
+		</ms-aichain:image-generate> [STUDIO] -->
+		<ee:transform doc:name="Transform Message" doc:id="2802b236-d889-4f02-a43d-0dd8f403f893" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	question: vars.userQuestion,
+    answer: payload,
+    model: "llama-3.3-70b-versatile",
+    provider: "Groq"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<!-- [STUDIO:"salesforce-mule-aiFlow"]<flow name="salesforce-mule-aiFlow" doc:id="90638658-f370-459f-b3eb-863f7645d0eb" >
+		<http:listener doc:name="Listener" doc:id="5862596a-eb6b-43a6-9e93-14a5b8c872c2" config-ref="HTTP_Listener_config" path="/case/{caseId}"/>
+		<set-variable value="#[attributes.uriParams.caseId&#93;" doc:name="Set Variable" doc:id="6d7a380d-10dd-40ec-befa-efc9ec35ac10" variableName="caseId"/>
+		<salesforce:query doc:name="Query" doc:id="370a4117-6087-4432-b125-88abd440ede2" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query ><![CDATA[SELECT Id, Subject, Description, Status, Priority, Origin
+FROM Case
+WHERE Id = ':caseId'&#93;&#93;></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[{caseId: attributes.uriParams.caseId}&#93;&#93;&#93;></salesforce:parameters>
+		</salesforce:query>
+		<logger level="INFO" doc:name="Logger" doc:id="6c4601e1-3940-46f6-8d4b-192c88c12073" message='Case Record: #[payload[0&#93;&#93;'/>
+		<ee:transform doc:name="Acting as Variables" doc:id="2579c01c-34a1-4635-8e86-8f2643165ace" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="caseData" ><![CDATA[%dw 2.0
+output application/java
+&#45;&#45;-
+payload[0&#93;&#93;&#93;></ee:set-variable>
+				<ee:set-variable variableName="aiPrompt" ><![CDATA[%dw 2.0
+output application/java
+&#45;&#45;-
+'You are a Salesforce CRM expert. Analyse this support case and provide:
+1. A concise 2-sentence summary of the issue
+2. Suggested next action for the support agent
+
+Case Details:
+Subject: ' ++ (vars.caseData.Subject default "No Subject") ++
+'\nDescription: ' ++ (vars.caseData.Description default "No Description") ++
+'\nStatus: ' ++ (vars.caseData.Status default "Closed") ++
+'\nPriority: ' ++ (vars.caseData.Priority default "Low")&#93;&#93;></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ms-aichain:chat-answer-prompt doc:name="Ask AI to Summarise" doc:id="f4fa1571-1ce8-4751-b0cc-7178535bbe61" config-ref="MuleSoft_AI_Chain_Config">
+			<ms-aichain:prompt ><![CDATA[#[vars.aiPrompt&#93;&#93;&#93;></ms-aichain:prompt>
+		</ms-aichain:chat-answer-prompt>
+		<logger level="INFO" doc:name="Logger" doc:id="c972c099-5ad7-4658-91f0-2911ac2ffd95" message='AI Response: #[payload&#93;'/>
+		<ee:transform doc:name="Transform Message" doc:id="68f52468-4d89-474d-b4ce-0dff5522aa73" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+&#45;&#45;-
+{
+	caseId: vars.caseId,
+    caseSubject: vars.caseData.Subject,
+    caseStatus: vars.caseData.Status,
+    aiSummary: payload,
+    generatedAt: now()
+}&#93;&#93;></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow> [STUDIO] -->
+</mule>
